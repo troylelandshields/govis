@@ -113,9 +113,9 @@ func createFuncNode(funcDecl *ast.FuncDecl, fileInBytes []byte, fG fGraph.Functi
 		select {
 		case <-done:
 			for _, fName := range funcCallNames {
-        fmt.Printf("[%s] calls [%s]\n", functionNode.Name(), fName)
-				calledFNode := fG.GetFunctionNode(fName)
-				functionNode.AddCall(calledFNode)
+				if calledFNode := fG.GetFunctionNode(fName); calledFNode != nil {
+					functionNode.AddCall(calledFNode)
+				}
 			}
 		}
 	}()
@@ -130,29 +130,58 @@ func getFuncCallNames(funcDecl *ast.FuncDecl, src []byte) []string {
 		switch stmtType := stmt.(type) {
 		case *ast.ExprStmt:
 			exprStmt := (*ast.ExprStmt)(stmtType)
+
 			callWithSignature := string(src[exprStmt.X.Pos()-1 : exprStmt.X.End()-1])
 
-			r, _ := regexp.Compile("(.*)\\(.*\\)")
-
-			matches := r.FindAllStringSubmatch(callWithSignature, -1)
-
-			if len(matches) != 1 {
-				panic("Uhhh, what?")
+			if callWithoutSignature, err := getCallWithoutSignature(callWithSignature); err == nil {
+				callNames = append(callNames, callWithoutSignature)
+			} else {
+				fmt.Println(err)
 			}
+		case *ast.AssignStmt:
+			//fmt.Println("assign stmt", stmtType)
 
-			callWithoutSignature := matches[0][1]
-			callNames = append(callNames, callWithoutSignature)
+			assignStmt := (*ast.AssignStmt)(stmtType)
 
+			for _, rhExpr := range assignStmt.Rhs {
+				callWithSignature := string(src[rhExpr.Pos()-1 : rhExpr.End()-1])
+
+				if callWithoutSignature, err := getCallWithoutSignature(callWithSignature); err == nil {
+					callNames = append(callNames, callWithoutSignature)
+				} else {
+					fmt.Println(err)
+				}
+
+			}
+		}
 		// case *ast.SendStmt:
-		// 	/fmt.Println("Send stmt", stmtType)
+		// 	fmt.Println("Send stmt", stmtType)
 		// case *ast.LabeledStmt:
 		// 	fmt.Println("Labeled stmt", stmtType)
 		// case *ast.BlockStmt:
 		// 	fmt.Println("block stmt", stmtType)
+
 		// default:
 		// 	fmt.Println("Unknown stmt type", stmtType)
-		}
+		// }
 	}
 
 	return callNames
+}
+
+func getCallWithoutSignature(callWithSignature string) (string, error) {
+	fmt.Printf("CallWithSignature: [%s]\n", callWithSignature)
+
+	r, _ := regexp.Compile(`\.?([a-zA-Z]*)\(.*\)`)
+
+	matches := r.FindAllStringSubmatch(callWithSignature, -1)
+
+	if len(matches) != 1 {
+		return "", fmt.Errorf("Doesn't look like function call: [%s]", callWithSignature)
+	}
+
+	callWithoutSignature := matches[0][1]
+	//fmt.Printf("[%s] calls [%s]\n", funcDecl.Name, callWithoutSignature)
+
+	return callWithoutSignature, nil
 }
