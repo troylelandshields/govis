@@ -62,9 +62,9 @@ func Exported() string{
 `},
 	}
 
-  fmt.Printf("Running [%d] tests\n\n", len(tDatas))
+	fmt.Printf("Running [%d] tests\n\n", len(tDatas))
 	for _, singleTest := range tDatas {
-    fmt.Printf("Running test: [%s]\n", singleTest.description)
+		fmt.Printf("Running test: [%s]\n", singleTest.description)
 		verifyMainCallsExported(t, singleTest)
 	}
 }
@@ -78,7 +78,7 @@ func verifyMainCallsExported(t *testing.T, tData *testData) {
 	for _, done := range dones {
 		done <- true
 	}
-
+	
 	expectFoundFuncsCount(t, parsedCode, 2)
 
 	mainFunc := expectFunctionWithName(t, parsedCode, "main")
@@ -88,6 +88,7 @@ func verifyMainCallsExported(t *testing.T, tData *testData) {
 	expectFunctionCallCount(t, mainFunc, 1)
 
 	expectFunctionNodesToEqual(t, mainFunc.Calls()[0], exportedFunc)
+	
 }
 
 func expectFoundFuncsCount(t *testing.T, fG fGraph.FunctionGraph, expected int) {

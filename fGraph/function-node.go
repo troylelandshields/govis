@@ -38,13 +38,13 @@ func (f *functionNode) AddCall(calledNode FunctionNode) {
 }
 
 func (f *functionNode) ToString() (str string) {
-	str += fmt.Sprintf("%s->\n\t[\n", f.Signature())
+	str += fmt.Sprintf("%s->\n[\n", f.Signature())
 	for _, called := range f.calls {
 		if called != nil {
-			str += fmt.Sprintf("\t %s ", called.Name())
+			str += fmt.Sprintf("\t %s \n", called.Name())
 		}
 	}
-	str += "\n\t]\n"
+	str += "\n]\n"
 	return str
 }
 

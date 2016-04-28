@@ -34,7 +34,7 @@ func goParseFile(path string, src interface{}) (ast *ast.File) {
 	fset := token.NewFileSet()
 	ast, err := goParser.ParseFile(fset, path, src, 0)
 	check(err)
-	return
+	return ast
 }
 
 func parseImportDeclarations(importSpecs []ast.Spec) []string {
@@ -68,33 +68,19 @@ func ParseFile(path string, src []byte, fG fGraph.FunctionGraph) (fGraph.Functio
 	syntaxTree := goParseFile(path, src)
 
 	dones := []chan bool{}
-	for _, declaration := range syntaxTree.Decls {
-		switch declType := declaration.(type) {
-		case *ast.GenDecl:
-			genericDeclaration := (*ast.GenDecl)(declType)
-			switch genericDeclaration.Tok {
-			// case token.IMPORT:
-			// 	// packageInfo.addImports(parseImportDeclarations(genericDeclaration.Specs))
-			// case token.TYPE:
-			// 	// packageInfo.addTypes(parseTypeDeclarations(genericDeclaration.Specs))
-			// case token.VAR:
-			// 	// packageInfo.addVars(parseVariableDeclarations(genericDeclaration.Specs, "var"))
-			// case token.CONST:
-			// packageInfo.addVars(parseVariableDeclarations(genericDeclaration.Specs, "const"))
-			default:
-				//fmt.Println("unknown generic declaration")
-			}
+	ast.Inspect(syntaxTree, func(node ast.Node) bool {
+		switch nodeType := node.(type) {
 		case *ast.FuncDecl:
-			funcDecl := (*ast.FuncDecl)(declType)
+			funcDecl := (*ast.FuncDecl)(nodeType)
 
 			fNode, done := createFuncNode(funcDecl, src, fG)
 			fG.AddFunctionNode(fNode)
 
 			dones = append(dones, done)
-		default:
-			//fmt.Println("unknown declaration")
 		}
-	}
+
+		return true
+	})
 
 	return fG, dones
 }
@@ -127,50 +113,59 @@ func getFuncCallNames(funcDecl *ast.FuncDecl, src []byte) []string {
 	callNames := []string{}
 
 	for _, stmt := range funcDecl.Body.List {
+		//For every exprStmt add it to the list of calls and check any of its args
+
 		switch stmtType := stmt.(type) {
 		case *ast.ExprStmt:
+			//Get function called in an ExprStmt
 			exprStmt := (*ast.ExprStmt)(stmtType)
 
-			callWithSignature := string(src[exprStmt.X.Pos()-1 : exprStmt.X.End()-1])
-
-			if callWithoutSignature, err := getCallWithoutSignature(callWithSignature); err == nil {
-				callNames = append(callNames, callWithoutSignature)
-			} else {
-				fmt.Println(err)
+			switch exprType := exprStmt.X.(type) {
+			case *ast.CallExpr:
+				callNames = append(callNames, getFuncNamesFromCallExpr(exprType, src)...)
 			}
 		case *ast.AssignStmt:
-			//fmt.Println("assign stmt", stmtType)
-
+			//Get function called in an assign stmt
 			assignStmt := (*ast.AssignStmt)(stmtType)
 
 			for _, rhExpr := range assignStmt.Rhs {
-				callWithSignature := string(src[rhExpr.Pos()-1 : rhExpr.End()-1])
-
-				if callWithoutSignature, err := getCallWithoutSignature(callWithSignature); err == nil {
-					callNames = append(callNames, callWithoutSignature)
-				} else {
-					fmt.Println(err)
+				switch exprType := rhExpr.(type) {
+				case *ast.CallExpr:
+					callNames = append(callNames, getFuncNamesFromCallExpr(exprType, src)...)
 				}
-
 			}
 		}
-		// case *ast.SendStmt:
-		// 	fmt.Println("Send stmt", stmtType)
-		// case *ast.LabeledStmt:
-		// 	fmt.Println("Labeled stmt", stmtType)
-		// case *ast.BlockStmt:
-		// 	fmt.Println("block stmt", stmtType)
-
-		// default:
-		// 	fmt.Println("Unknown stmt type", stmtType)
-		// }
 	}
 
 	return callNames
 }
 
+func getFuncNamesFromCallExpr(callExpr *ast.CallExpr, src []byte) []string {
+	callNames := []string{}
+
+	callWithSignature := getCodeSnippet(callExpr, src)
+
+	if callWithoutSignature, err := getCallWithoutSignature(callWithSignature); err == nil {
+		callNames = append(callNames, callWithoutSignature)
+	}
+
+	for _, e := range callExpr.Args {
+		switch cE := e.(type) {
+		case *ast.CallExpr:
+			callNames = append(callNames, getFuncNamesFromCallExpr(cE, src)...)
+		}
+	}
+
+	return callNames
+}
+
+
+func getCodeSnippet(node ast.Node, src []byte) string {
+	return string(src[node.Pos()-1 : node.End()-1])
+}
+
 func getCallWithoutSignature(callWithSignature string) (string, error) {
-	fmt.Printf("CallWithSignature: [%s]\n", callWithSignature)
+	//fmt.Printf("CallWithSignature: [%s]\n", callWithSignature)
 
 	r, _ := regexp.Compile(`\.?([a-zA-Z]*)\(.*\)`)
 

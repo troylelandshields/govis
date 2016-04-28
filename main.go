@@ -36,8 +36,7 @@ func main() {
 		//Parse if file is .go file.
 		extension := filepath.Ext(path)
 		if strings.ToLower(extension) == ".go" {
-      
-      
+
 			var temp []chan bool
 			fG, temp = parser.ParseFile(path, nil, fG)
 
@@ -52,6 +51,12 @@ func main() {
 	for _, d := range dones {
 		d <- true
 	}
-  
-	log.Println(fG.ToString())
+	
+	d, err := fG.ToJSON()
+	
+	if err != nil {
+		log.Printf("Error: [%s]\n", err)
+	}
+	
+	os.Stdout.Write(d)
 }
